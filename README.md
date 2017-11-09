@@ -4,14 +4,16 @@ poke is summoned for analyzing MySQL slow query logs, poke examines log
 entries, converts text to JSON format and detects following features:
 
 - time when query was started (using `Time:` and `Query_time` fields), 
-- query type: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `DROP`
+- query type: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `DROP`, `REPLACE`
 - query length
+- query digest, and finger print
+- read from `-f`, `--file` or stdin
+- each query generates output json in each line
 
 After analyzing slow logs poke will print JSON output to stdout, like as
 following:
 
 ```
-[
     {
         "bytes_sent": 0,
         "filesort": false,
@@ -37,7 +39,7 @@ following:
         "tmp_table_on_disk": false,
         "tmp_table_sizes": 0,
         "tmp_tables": 0
-    },
+    }
     {
         "bytes_sent": 0,
         "filesort": false,
@@ -64,25 +66,6 @@ following:
         "tmp_table_sizes": 0,
         "tmp_tables": 0
     }
-]
-```
-
-## What we can do with that JSON
-
-We can use [github.com/kovetskiy/jsql](https://github.com/kovetskiy/jsql) and
-query JSON dataset using SQL queries.
-
-
-## Installation
-
-Arch Linux User Repository:
-
-[https://aur.archlinux.org/packages/jsql-git/](https://aur.archlinux.org/packages/jsql-git/)
-
-or manually:
-
-```
-go get github.com/kovetskiy/jsql
 ```
 
 ## License

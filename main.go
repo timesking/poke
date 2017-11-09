@@ -37,7 +37,7 @@ Usage:
     poke --version
 
 Options:
-    -f --file <path>  Specify file location to read. [default: /dev/stdin]
+    -f --file <path>  Specify file location to read.
     -h --help         Show this screen.
     --version         Show version.
 `
@@ -107,18 +107,21 @@ func main() {
 	args := godocs.MustParse(usage, version, godocs.UsePager)
 
 	compileRegexps()
-
-	file, err := os.Open(args["--file"].(string))
-	if err != nil {
-		hierr.Fatalf(
-			err, "can't open file: %s", args["--file"].(string),
-		)
+	inputReader := os.Stdin
+	filename, ok := args["--file"].(string)
+	if ok && filename != "" {
+		file, err := os.Open(filename)
+		if err != nil {
+			hierr.Fatalf(
+				err, "can't open file: %s", filename,
+			)
+		}
+		inputReader = file
 	}
-
 	var (
-		reader  = bufio.NewReader(file)
-		record  = Record{}
-		records = []Record{}
+		reader = bufio.NewReader(inputReader)
+		record = Record{}
+		// records = []Record{}
 	)
 
 	var line string
@@ -136,7 +139,6 @@ func main() {
 
 		if isPrefix {
 			line += string(data)
-
 			continue
 		}
 
@@ -145,7 +147,8 @@ func main() {
 		if strings.HasPrefix(line, "# Time: ") {
 			if len(record) > 0 {
 				if record, ok := process(record); ok {
-					records = append(records, record)
+					record = prepare(record)
+					// records = append(records, record)
 				}
 			}
 
@@ -160,26 +163,22 @@ func main() {
 
 		err = unmarshal(line, record)
 		if err != nil {
-			log.Println(err)
+			hierr.Fatalf(err, "unmarshal error")
 		}
 	}
 
 	if record, ok := process(record); ok {
-		records = append(records, record)
+		record = prepare(record)
+		// records = append(records, record)
 	}
 
-	for index, record := range records {
-		records[index] = prepare(record)
-	}
-
-	data, err := json.MarshalIndent(records, "", "    ")
-	if err != nil {
-		hierr.Fatalf(
-			err, "unable to encode records to JSON",
-		)
-	}
-
-	fmt.Println(string(data))
+	// data, err := json.MarshalIndent(records, "", "  ")
+	// if err != nil {
+	// 	hierr.Fatalf(
+	// 		err, "unable to encode records to JSON",
+	// 	)
+	// }
+	// fmt.Println(string(data))
 }
 
 func process(record Record) (Record, bool) {
@@ -204,7 +203,8 @@ func process(record Record) (Record, bool) {
 		stmt, err := sqlparser.Parse(rawquery)
 		if err != nil {
 			// Do something with the err
-			fmt.Println(err)
+			log.Println(err)
+			return record, false
 		}
 
 		// Otherwise do something with stmt
@@ -221,7 +221,8 @@ func process(record Record) (Record, bool) {
 		case *sqlparser.Delete:
 			tableName = GetTablePtrsName(s.TableExprs)
 		default:
-			fmt.Printf(`unsupport prepare sql "%s", %v\n`, rawquery, s)
+			log.Printf(`unsupport prepare sql "%s", %v\n`, rawquery, s)
+			return record, false
 		}
 		record["table"] = tableName
 	}
@@ -240,6 +241,11 @@ func prepare(record Record) Record {
 		}
 	}
 
+	if output, err := json.Marshal(record); err != nil {
+		hierr.Fatalf(err, "Ouput Marshal error %v", record)
+	} else {
+		fmt.Println(string(output))
+	}
 	return record
 }
 
