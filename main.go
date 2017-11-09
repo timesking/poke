@@ -334,7 +334,7 @@ func getQueryType(query string) string {
 
 	return ""
 }
-func WalkTableName(node sqlparser.SQLNode, nameList *[]string, indent int) (kontinue bool, err error) {
+func WalkTableName(node sqlparser.SQLNode, nameList map[string]interface{}, indent int) (kontinue bool, err error) {
 	if indent >= 0 {
 		indent++
 		for i := 0; i < indent; i++ {
@@ -366,7 +366,7 @@ func WalkTableName(node sqlparser.SQLNode, nameList *[]string, indent int) (kont
 		}
 		name := sqlparser.String(tn)
 		if len(name) > 0 {
-			*nameList = append(*nameList, name)
+			nameList[name] = name
 		}
 		return false, nil
 	}
@@ -375,12 +375,16 @@ func WalkTableName(node sqlparser.SQLNode, nameList *[]string, indent int) (kont
 }
 
 func GetTablePtrsName(te sqlparser.TableExprs) string {
-	var namelist []string
+	namelist := make(map[string]interface{})
 	te.WalkSubtree(func(node sqlparser.SQLNode) (kontinue bool, err error) {
-		return WalkTableName(node, &namelist, -1)
+		return WalkTableName(node, namelist, -1)
 	})
 
-	sort.Strings(namelist)
-	fmt.Println(len(namelist))
-	return strings.Join(namelist, ",")
+	keys := make([]string, 0, len(namelist))
+	for k := range namelist {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	// fmt.Println(len(namelist))
+	return strings.Join(keys, ",")
 }
