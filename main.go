@@ -15,8 +15,8 @@ import (
 	"os"
 
 	"github.com/kovetskiy/godocs"
+	hierr "github.com/reconquest/hierr-go"
 	"github.com/reconquest/ser-go"
-	"github.com/seletskiy/hierr"
 )
 
 var (
@@ -195,7 +195,7 @@ func prepare(record Record) Record {
 	for key, value := range record {
 		switch value := value.(type) {
 		case time.Time:
-			record[key] = value.Format("2006-01-02 15:04:05.00000000")
+			record[key] = value.Format("2006-01-02T15:04:05.000000Z")
 
 		case time.Duration:
 			record[key] = value.Seconds()
@@ -248,7 +248,7 @@ func match(data, key string) (string, bool) {
 func parse(raw, key, rule string) (interface{}, error) {
 	switch rule {
 	case "datetime":
-		return time.Parse("060102 15:04:05.0000000000", raw)
+		return time.Parse("2006-01-02T15:04:05.000000Z", raw)
 	case "time":
 		return time.ParseDuration(raw + "s")
 	case "string":
