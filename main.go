@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -15,8 +16,10 @@ import (
 	"os"
 
 	"github.com/kovetskiy/godocs"
+	"github.com/percona/go-mysql/query"
 	hierr "github.com/reconquest/hierr-go"
 	"github.com/reconquest/ser-go"
+	"github.com/xwb1989/sqlparser"
 )
 
 var (
@@ -149,6 +152,12 @@ func main() {
 			record = Record{}
 		}
 
+		if !strings.HasPrefix(line, "#") {
+			if "" == getQueryType(line) {
+				continue
+			}
+		}
+
 		err = unmarshal(line, record)
 		if err != nil {
 			log.Println(err)
@@ -182,10 +191,39 @@ func process(record Record) (Record, bool) {
 		return record, false
 	}
 
-	if query, ok := record["query"].(string); ok {
-		record["query_length"] = len(query)
+	if rawquery, ok := record["query"].(string); ok {
+		record["query_length"] = len(rawquery)
 
-		record["query_type"] = getQueryType(query)
+		record["query_type"] = getQueryType(rawquery)
+
+		newQuery := query.Fingerprint(rawquery)
+		fingerprint := query.Id(newQuery)
+		record["query_digest"] = newQuery
+		record["fingerprintID"] = fingerprint
+
+		stmt, err := sqlparser.Parse(rawquery)
+		if err != nil {
+			// Do something with the err
+			fmt.Println(err)
+		}
+
+		// Otherwise do something with stmt
+
+		var tableName string
+		nstring := sqlparser.String
+		switch s := stmt.(type) {
+		case *sqlparser.Select:
+			tableName = GetTablePtrsName(s.From)
+		case *sqlparser.Insert:
+			tableName = nstring(s.Table)
+		case *sqlparser.Update:
+			tableName = GetTablePtrsName(s.TableExprs)
+		case *sqlparser.Delete:
+			tableName = GetTablePtrsName(s.TableExprs)
+		default:
+			fmt.Printf(`unsupport prepare sql "%s", %v\n`, rawquery, s)
+		}
+		record["table"] = tableName
 	}
 
 	return record, true
@@ -207,6 +245,7 @@ func prepare(record Record) Record {
 
 func unmarshal(line string, record Record) error {
 	if !strings.HasPrefix(line, "# ") {
+
 		_, ok := record["query"]
 		if ok {
 			record["query"] = record["query"].(string) + line
@@ -276,6 +315,7 @@ func getQueryType(query string) string {
 		"UPDATE",
 		"DELETE",
 		"DROP",
+		"REPLACE",
 	}
 
 	min := -1
@@ -293,4 +333,54 @@ func getQueryType(query string) string {
 	}
 
 	return ""
+}
+func WalkTableName(node sqlparser.SQLNode, nameList *[]string, indent int) (kontinue bool, err error) {
+	if indent >= 0 {
+		indent++
+		for i := 0; i < indent; i++ {
+			fmt.Print("-")
+		}
+		fmt.Printf("%T\n", node)
+	}
+
+	switch tn := node.(type) {
+	case *sqlparser.AliasedTableExpr:
+	case sqlparser.TableExprs:
+		tn.WalkSubtree(func(node sqlparser.SQLNode) (kontinue bool, err error) {
+			return WalkTableName(node, nameList, indent)
+		})
+		return false, nil
+	case *sqlparser.AliasedExpr:
+		return false, nil
+	case *sqlparser.ComparisonExpr:
+		return false, nil
+	case *sqlparser.Where:
+		return false, nil
+	case sqlparser.TableName:
+		if indent >= 0 {
+			for i := 0; i < indent; i++ {
+				fmt.Print("-")
+			}
+			fmt.Print("-")
+			fmt.Println(sqlparser.String(tn))
+		}
+		name := sqlparser.String(tn)
+		if len(name) > 0 {
+			*nameList = append(*nameList, name)
+		}
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func GetTablePtrsName(te sqlparser.TableExprs) string {
+	var namelist []string
+	te.WalkSubtree(func(node sqlparser.SQLNode) (kontinue bool, err error) {
+		return WalkTableName(node, &namelist, -1)
+	})
+
+	sort.Strings(namelist)
+	fmt.Println(len(namelist))
+	return strings.Join(namelist, ",")
 }
